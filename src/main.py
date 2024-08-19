@@ -44,4 +44,4 @@ while not done and not truncated:
     position_index = env.action_space.sample()
     observation, reward, done, truncated, info = env.step(position_index)
 
-env.unwrapped.save_for_render(dir="render_logs")
+# env.unwrapped.save_for_render(dir="render_logs")
