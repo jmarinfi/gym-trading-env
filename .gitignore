@@ -3,3 +3,6 @@ src/data/
 src/render_logs/
 **/__pycache__/
 **/*.pyc
+**/*.keras
+**/*.png
+--pycache--/
