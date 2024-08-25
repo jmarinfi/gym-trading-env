@@ -13,7 +13,7 @@ from src.utils_env.train_agent import train_agent, evaluate_agent
 today = datetime.today()
 
 download_data('data', since=datetime(year=2019, month=1, day=1), until=datetime(year=2023, month=5, day=31))
-download_data('validation', since=datetime(year=2024, month=3, day=1), until=today)
+download_data('validation', since=datetime(year=2023, month=6, day=1), until=today)
 
 def create_env(dataset_dir):
     env = gym.make(
@@ -51,10 +51,9 @@ agent = DDQNAgent(
 
 # Parámetros de entrenamiento
 num_iterations = 10
-steps_per_iteration = 100
-update_target_frequency = 10
-save_frequency = 50
-decay_frequency = 10
+steps_per_iteration = 10000
+update_target_frequency = 1000
+decay_frequency = 1000
 
 train_rewards = []
 val_portfolio_values = []
@@ -63,9 +62,9 @@ val_benchmark_values = []
 for iteration in range(num_iterations):
     print(f'Iteration {iteration}/{num_iterations}')
 
-    tracker_train = train_agent(steps_per_iteration, update_target_frequency, save_frequency, decay_frequency, agent, envs_data)
+    tracker_train = train_agent(steps_per_iteration, update_target_frequency, decay_frequency, agent, envs_data)
     plot_training_performance(tracker_train, iteration=iteration)
-    train_rewards.append(np.mean(tracker_train.rewards[-100:]))
+    train_rewards.append(np.mean(tracker_train.rewards[-steps_per_iteration:]))
 
     portfolio_values, benchmark_values = evaluate_agent(envs_validation, agent)
     plot_evaluation_performance(portfolio_values, benchmark_values, iteration=iteration)

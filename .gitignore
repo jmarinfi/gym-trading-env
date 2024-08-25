@@ -7,3 +7,5 @@ src/render_logs/
 **/*.keras
 **/*.png
 --pycache--/
+.env
+src/data_live/

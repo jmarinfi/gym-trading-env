@@ -5,6 +5,7 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Input
 from tensorflow.keras.optimizers import Adam
+from keras.models import load_model
 
 
 class DDQNAgent:
@@ -45,8 +46,9 @@ class DDQNAgent:
 
     def act(self, state):
         if not self.is_eval and np.random.rand() <= self.epsilon:
+            print('Explorando. Acción aleatoria.')
             return random.randrange(self.num_actions)
-        print("Predicting actions")
+        print('Explotando. Acción predicha por el modelo.')
         act_values = self.model.predict(state, verbose=0)
         return np.argmax(act_values[0])
 
@@ -60,7 +62,11 @@ class DDQNAgent:
         next_states = np.array([experience[3] for experience in minibatch])
         dones = np.array([experience[4] for experience in minibatch])
 
-        batch_size, num_envs, windows, num_features = states.shape
+        if len(states.shape) == 4:
+            batch_size, num_envs, windows, num_features = states.shape
+        else:
+            batch_size, windows, num_features = states.shape
+            num_envs = 1
         states = np.reshape(states, (batch_size * num_envs, windows, num_features))
         next_states = np.reshape(next_states, (batch_size * num_envs, windows, num_features))
         if len(actions.shape) == 2:
@@ -87,7 +93,8 @@ class DDQNAgent:
         self.model.fit(states, target, epochs=1, verbose=0)
 
     def load(self, name):
-        self.model.load_weights(name)
+        # self.model.load_weights(name)
+        self.model = load_model(name)
 
     def save(self, name):
         self.model.save(f"{name}.keras")
