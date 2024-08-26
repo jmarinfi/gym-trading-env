@@ -5,7 +5,6 @@ from src.utils_env.performance_evaluation import PerformanceTracker
 
 def train_agent(num_steps, update_target_frequency, decay_frequency, agent, envs):
     states, info = envs.reset()
-    print(info)
     agent.is_eval = False
     tracker = PerformanceTracker()
     episode_reward = 0
@@ -23,6 +22,7 @@ def train_agent(num_steps, update_target_frequency, decay_frequency, agent, envs
             agent.replay()
 
         if step > 0 and step % update_target_frequency == 0:
+            print('__Update target model__')
             agent.update_target_model()
 
         if step > 0 and step % decay_frequency == 0:

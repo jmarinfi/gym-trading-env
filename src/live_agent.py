@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from src.utils_agent.ddqn_agent import DDQNAgent
 from src.utils_data.exchange_connector_binance import BinanceConnector, IntervalLetter
-from src.utils_data.manage_data import download_data, preprocess_data_env
+from src.utils_data.manage_data import preprocess_data_env
 from src.utils_env.custom_reward import simple_custom_reward
 
 load_dotenv()
@@ -39,23 +39,33 @@ agent = DDQNAgent(
     gamma=0.99,
     num_inner_neurons=64
 )
-agent.load(model_path)
 
 while True:
     agent.is_eval = True
 
     # Obtener los últimos datos del exchange
     end_time = datetime.now()
-    start_time = end_time - timedelta(hours=60)
-    download_data('data_live', since=start_time, until=end_time, timeframe='5m')
+    start_time = end_time - timedelta(hours=61)
 
-    df = pd.read_pickle(df_path)
+    klines = binance_connector.get_klines('BTCUSDC', 5, IntervalLetter.MINUTE, start_time=int(start_time.timestamp()*1000), end_time=int(end_time.timestamp()*1000), limit=1000)
+    df = pd.DataFrame(klines, columns=[
+        'timestamp', 'open', 'high', 'low', 'close', 'volume',
+        'close_time', 'quote_asset_volume', 'number_of_trades',
+        'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
+    ])
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+    df.set_index('timestamp', inplace=True)
+    df = df[['open', 'high', 'low', 'close', 'volume']]
+    df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
+    print(df)
+    df = preprocess_data_env(df)
+    print(df)
+
     first_timestamp = df.index[0]
     offset = pd.Timedelta(minutes=first_timestamp.minute, seconds=first_timestamp.second, microseconds=first_timestamp.microsecond)
 
     # Resamplear los datos a 1h
     df = df.resample('1h', offset=offset).agg({
-        'date_close': lambda x: x.iloc[-1] if len(x) > 0 else np.nan,
         'open': lambda x: x.iloc[0] if len(x) > 0 else np.nan,
         'high': lambda x: max(x) if len(x) > 0 else np.nan,
         'low': lambda x: min(x) if len(x) > 0 else np.nan,
@@ -65,6 +75,7 @@ while True:
 
     # Preprocesar los datos
     df = preprocess_data_env(df)[-30:]
+    print(df)
 
     # Crear el entorno
     env = gym.make(

@@ -46,9 +46,7 @@ class DDQNAgent:
 
     def act(self, state):
         if not self.is_eval and np.random.rand() <= self.epsilon:
-            print('Explorando. Acción aleatoria.')
             return random.randrange(self.num_actions)
-        print('Explotando. Acción predicha por el modelo.')
         act_values = self.model.predict(state, verbose=0)
         return np.argmax(act_values[0])
 

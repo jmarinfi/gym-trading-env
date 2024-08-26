@@ -12,15 +12,15 @@ from src.utils_env.train_agent import train_agent, evaluate_agent
 
 today = datetime.today()
 
-download_data('data', since=datetime(year=2019, month=1, day=1), until=datetime(year=2023, month=5, day=31))
-download_data('validation', since=datetime(year=2023, month=6, day=1), until=today)
+download_data('data', since=datetime(year=2020, month=1, day=1), until=datetime(year=2024, month=5, day=31))
+download_data('validation', since=datetime(year=2024, month=6, day=1), until=today)
 
 def create_env(dataset_dir):
     env = gym.make(
         "MultiDatasetTradingEnv",
         dataset_dir=dataset_dir,
         preprocess=preprocess_data_env,
-        positions=[-1, -0.5, 0, 1, 2],
+        positions=[-1, -0.5, 0, 0.5, 1],
         trading_fees=0.01 / 100,
         borrow_interest_rate=0.0003 / 100,
         reward_function=simple_custom_reward,
@@ -36,24 +36,37 @@ def create_env(dataset_dir):
 envs_data = gym.vector.SyncVectorEnv([lambda: create_env('data/*.pkl') for _ in range(4)])
 envs_validation = gym.vector.SyncVectorEnv([lambda: create_env('validation/*.pkl') for _ in range(4)])
 
+# agent = DDQNAgent(
+#     sequence_length=30,
+#     batch_size=32,
+#     num_actions=5,
+#     epsilon=1.0,
+#     epsilon_min=0.01,
+#     epsilon_decay=0.995,
+#     learning_rate=0.001,
+#     num_features=10,
+#     gamma=0.99,
+#     num_inner_neurons=64
+# )
+
 agent = DDQNAgent(
-    sequence_length=30,
+    sequence_length=90,
     batch_size=32,
     num_actions=5,
     epsilon=1.0,
-    epsilon_min=0.01,
+    epsilon_min=0.1,
     epsilon_decay=0.995,
     learning_rate=0.001,
     num_features=10,
     gamma=0.99,
-    num_inner_neurons=64
+    num_inner_neurons=512
 )
 
 # Parámetros de entrenamiento
-num_iterations = 10
-steps_per_iteration = 10000
-update_target_frequency = 1000
-decay_frequency = 1000
+num_iterations = 100
+steps_per_iteration = 100
+update_target_frequency = 10
+decay_frequency = 10
 
 train_rewards = []
 val_portfolio_values = []
