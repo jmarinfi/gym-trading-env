@@ -1,37 +1,41 @@
-import gymnasium as gym
 import math
 import random
-import matplotlib.pyplot as plt
 from collections import namedtuple, deque
+from datetime import datetime
 from itertools import count
 
+import gymnasium as gym
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
+import torch.optim as optim
 
+from src.utils_data.manage_data import preprocess_data_env, download_data
 from src.utils_env.custom_reward import simple_custom_reward
-from src.utils_data.manage_data import preprocess_data_env
 
-# Configuración del entorno
-env = gym.make(
-    "MultiDatasetTradingEnv",
-    dataset_dir='../data/*.pkl',
-    preprocess=preprocess_data_env,
-    positions=[-1, -0.5, 0, 1, 2],
-    trading_fees=0.01 / 100,
-    borrow_interest_rate=0.0003 / 100,
-    reward_function=simple_custom_reward,
-    portfolio_initial_value=1000,
-    verbose=1
-)
 
-# Configuración de matplotlib
-is_ipython = 'inline' in plt.get_backend()
-if is_ipython:
-    from IPython import display
+today = datetime.today()
 
-plt.ion()
+download_data('../data', since=datetime(year=2020, month=1, day=1), until=datetime(year=2024, month=5, day=31), symbols=["BTC/USDC"])
+download_data('../data_validation', since=datetime(year=2024, month=6, day=1), until=today, symbols=["BTC/USDC"])
+
+def create_env(dataset_dir):
+    env = gym.make(
+        "MultiDatasetTradingEnv",
+        dataset_dir=dataset_dir,
+        preprocess=preprocess_data_env,
+        positions=[-1, -0.5, 0, 0.5, 1, 2],
+        trading_fees=0.075/100,
+        borrow_interest_rate=0.0000016146,
+        reward_function=simple_custom_reward,
+        portfolio_initial_value=1000,
+        verbose=1
+    )
+    env.unwrapped.add_metric('Accumulated reward', lambda history: sum(history['reward']))
+
+    return env
 
 # Dispositivo (CPU o GPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -64,6 +68,11 @@ class DQN(nn.Module):
         x = F.relu(self.layer2(x))
         return self.layer3(x)
 
+
+env_data = create_env('../data/*.pkl')
+env_validation = create_env('../data_validation/*.pkl')
+
+
 # Hiperparámetros
 BATCH_SIZE = 128
 GAMMA = 0.99
@@ -73,9 +82,14 @@ EPS_DECAY = 1000
 TAU = 0.005
 LR = 1e-4
 
-n_actions = env.action_space.n
-state, info = env.reset()
+n_actions = env_data.action_space.n
+state, info = env_data.reset()
 n_observations = len(state)
+
+print(f"n_observations: {n_observations}")
+print(f"n_actions: {n_actions}")
+print(f"state: {state}")
+print(f"info: {info}")
 
 policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
@@ -96,18 +110,18 @@ def select_action(state):
         with torch.no_grad():
             return policy_net(state).max(1).indices.view(1, 1)
     else:
-        return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
+        return torch.tensor([[env_data.action_space.sample()]], device=device, dtype=torch.long)
 
 episode_rewards = []
 
-def plot_rewards(show_result=False):
+def plot_rewards(episode, show_result=False):
     plt.figure(2)
     rewards_t = torch.tensor(episode_rewards, dtype=torch.float)
     if show_result:
         plt.title('Result')
     else:
-        plt.clf()
-        plt.title('Training...')
+        # plt.clf()
+        plt.title('Training... Episode: ' + str(episode))
     plt.xlabel('Episode')
     plt.ylabel('Reward')
     plt.plot(rewards_t.numpy())
@@ -116,13 +130,9 @@ def plot_rewards(show_result=False):
         means = torch.cat((torch.zeros(99), means))
         plt.plot(means.numpy())
 
-    plt.pause(0.001)
-    if is_ipython:
-        if not show_result:
-            display.display(plt.gcf())
-            display.clear_output(wait=True)
-        else:
-            display.display(plt.gcf())
+    # plt.pause(0.001)
+    plt.savefig(f'episode_{episode}.png')
+    plt.close()
 
 def optimize_model():
     if len(memory) < BATCH_SIZE:
@@ -156,12 +166,12 @@ def optimize_model():
 num_episodes = 1000
 
 for i_episode in range(num_episodes):
-    state, info = env.reset()
+    state, info = env_data.reset()
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
     episode_reward = 0
     for t in count():
         action = select_action(state)
-        observation, reward, terminated, truncated, _ = env.step(action.item())
+        observation, reward, terminated, truncated, _ = env_data.step(action.item())
         reward = torch.tensor([reward], device=device)
         episode_reward += reward.item()
         done = terminated or truncated
@@ -185,10 +195,44 @@ for i_episode in range(num_episodes):
 
         if done:
             episode_rewards.append(episode_reward)
-            plot_rewards()
+            plot_rewards(episode=i_episode)
             break
 
+    state, info = env_validation.reset()
+    state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+    done, truncated = False, False
+    portfolio_values = []
+    benchmark_values = []
+    initial_close = info['data_close']
+    initial_portfolio = info['portfolio_valuation']
+
+    while not done and not truncated:
+        action = policy_net(state).max(1).indices.view(1, 1)
+        observation, reward, done, truncated, info = env_validation.step(action.item())
+        next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+        state = next_state
+
+        portfolio_values.append(info['portfolio_valuation'])
+        current_close = info['data_close']
+        benchmark_values.append(initial_portfolio * (current_close / initial_close))
+
+    portfolio_values = np.array(portfolio_values)
+    benchmark_values = np.array(benchmark_values)
+
+    plt.plot(portfolio_values, label='Portfolio')
+    plt.plot(benchmark_values, label='Benchmark')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(f'portfolio_vs_benchmark_{str(i_episode)}.png')
+    plt.close()
+
+
 print('Complete')
-plot_rewards(show_result=True)
-plt.ioff()
-plt.show()
+plot_rewards(episode=num_episodes ,show_result=True)
+# plt.ioff()
+# plt.show()
+
+
+
+env_data.close()
+env_validation.close()

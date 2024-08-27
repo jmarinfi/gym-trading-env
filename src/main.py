@@ -13,7 +13,7 @@ from src.utils_env.train_agent import train_agent, evaluate_agent
 today = datetime.today()
 
 download_data('data', since=datetime(year=2020, month=1, day=1), until=datetime(year=2024, month=5, day=31))
-download_data('validation', since=datetime(year=2024, month=6, day=1), until=today)
+download_data('data_validation', since=datetime(year=2024, month=6, day=1), until=today)
 
 def create_env(dataset_dir):
     env = gym.make(
@@ -34,7 +34,7 @@ def create_env(dataset_dir):
     return env
 
 envs_data = gym.vector.SyncVectorEnv([lambda: create_env('data/*.pkl') for _ in range(4)])
-envs_validation = gym.vector.SyncVectorEnv([lambda: create_env('validation/*.pkl') for _ in range(4)])
+envs_validation = gym.vector.SyncVectorEnv([lambda: create_env('data_validation/*.pkl') for _ in range(4)])
 
 # agent = DDQNAgent(
 #     sequence_length=30,
@@ -92,7 +92,7 @@ for iteration in range(num_iterations):
     print(f'Validation Benchmark Value: {val_benchmark_values[-1]}')
     print('----------------------------------------------------------')
 
-# Plot overall training and validation performance
+# Plot overall training and data_validation performance
 plt.figure(figsize=(12, 6))
 plt.subplot(2, 1, 1)
 plt.plot(train_rewards)
